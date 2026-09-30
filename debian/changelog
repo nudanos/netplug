@@ -1,6 +1,8 @@
-netplug (1.2.9.2-3vyatta11+nudanos1) trixie; urgency=medium
+netplug (1:1.2.9.2-3vyatta11+nudanos1) trixie; urgency=medium
 
   * Port to Debian 13 (trixie): debhelper-compat 13, Standards-Version 4.7.2, Rules-Requires-Root, NuDanOS Vcs.
+  * Add epoch 1: Debian 13 ships netplug 1.2.9.2-5, which sorts above this
+    fork and would replace it (and the DANOS patches) on upgrade.
 
  -- NuDanOS Maintainers <jon@fernandez.tech>  Wed, 30 Sep 2026 03:01:36 -0700
 
