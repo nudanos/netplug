@@ -1,3 +1,9 @@
+netplug (1.2.9.2-3vyatta11+nudanos1) trixie; urgency=medium
+
+  * Port to Debian 13 (trixie): debhelper-compat 13, Standards-Version 4.7.2, Rules-Requires-Root, NuDanOS Vcs.
+
+ -- NuDanOS Maintainers <jon@fernandez.tech>  Wed, 30 Sep 2026 03:01:36 -0700
+
 netplug (1.2.9.2-3vyatta11) unstable; urgency=medium
 
   * dh-systemd is part of debhelper

@@ -6,7 +6,7 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 export initdir=$$(prefix)/etc/init.d
 
 %:
-	dh $@ --with systemd
+	dh $@
 
 override_dh_auto_install:
 	dh_auto_install
