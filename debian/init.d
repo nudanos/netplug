@@ -13,7 +13,7 @@
 ### END INIT INFO
 
 PATH=/sbin:/bin
-DAEMON=/sbin/netplugd
+DAEMON=/usr/sbin/netplugd
 NAME=netplugd
 DESC="network plug daemon"
 PIDFILE=/var/run/$NAME.pid

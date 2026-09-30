@@ -4,6 +4,8 @@
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 export initdir=$$(prefix)/etc/init.d
+# Debian 13 is merged-usr: install the daemon under /usr/sbin
+export bindir=$$(prefix)/usr/sbin
 
 %:
 	dh $@

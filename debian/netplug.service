@@ -3,7 +3,7 @@ Description=Network cable hotplug management daemon
 After=network.target
 
 [Service]
-ExecStart=/sbin/netplugd -P -F
+ExecStart=/usr/sbin/netplugd -P -F
 Restart=on-failure
 
 [Install]
