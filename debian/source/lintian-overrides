@@ -1,3 +1,0 @@
-# The epoch is not for an upstream version going backwards: Debian 13 ships
-# netplug 1.2.9.2-5, which would otherwise replace this fork on upgrade.
-netplug source: epoch-changed-but-upstream-version-did-not-go-backwards * [debian/changelog:1]
