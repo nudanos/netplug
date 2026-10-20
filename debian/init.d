@@ -21,10 +21,12 @@ PIDFILE=/var/run/$NAME.pid
 test -x "$DAEMON" || exit 0
 
 # Load the VERBOSE setting and other rcS variables
+# shellcheck source=/dev/null # a system file, not part of this package
 . /lib/init/vars.sh
 
 # Define LSB log_* functions.
 # Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
+# shellcheck source=/dev/null # a system file, not part of this package
 . /lib/lsb/init-functions
 
 do_start () {
@@ -44,6 +46,7 @@ do_stop () {
 	#   1 if daemon was already stopped
 	#   2 if daemon could not be stopped
 	#   other if a failure occurred
+	# shellcheck disable=SC3043 # reason: Debian Policy 10.4 allows local in /bin/sh scripts
 	local RETVAL
 	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --pidfile "$PIDFILE" --name "$NAME"
 	RETVAL="$?"

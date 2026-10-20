@@ -16,3 +16,4 @@ vyatta/limit-concurrent-processes.patch
 vyatta/netlink-if-mac-change.patch
 vyatta/st_wait-in-up.patch
 vyatta/policy-agent.patch
+vyatta/lint-fixes.patch

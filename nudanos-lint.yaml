@@ -1,0 +1,4 @@
+# NuDanOS lint (distro docs/porting.md).
+skip:
+  # Red Hat init script: debian/rules removes it from the package
+  - "scripts/rc.netplugd"

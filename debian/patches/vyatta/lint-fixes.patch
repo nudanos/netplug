@@ -1,0 +1,553 @@
+Description: analyzer findings (NuDanOS code-quality lint)
+ NULL terminators of run_netplug_bg's variable arguments passed as
+ (char *) NULL; do_log starts its va_list after the early return, so every
+ va_start has its va_end; the script's log line is built with bounded
+ snprintf instead of strncpy/strncat with the buffer size as bound (which
+ could write past the end); sizeof(*tb) and sizeof(*ifa) where the code
+ meant the element and the struct, not a pointer (the same size on amd64);
+ calloc arguments in order; signed/unsigned comparisons with explicit casts
+ where the value cannot be negative; const where pointers are only read;
+ (void) for callback-signature parameters; narrower variable scopes; quoted
+ arguments in the netplug script; reasoned cppcheck suppressions where it
+ cannot see a callback or the header's users.
+Author: NuDanOS Maintainers <jon@fernandez.tech>
+Forwarded: no
+Last-Update: 2026-10-20
+---
+--- a/if_info.c
++++ b/if_info.c
+@@ -79,7 +79,7 @@ flags_str(char *buf, unsigned int fl)
+ 
+     *cp = '\0';
+ 
+-    for(int i = 0; i < sizeof(flags)/sizeof(*flags); i++) {
++    for (size_t i = 0; i < sizeof(flags)/sizeof(*flags); i++) {
+         if (fl & flags[i].flag) {
+             fl &= ~flags[i].flag;
+             cp += sprintf(cp, "%s,", flags[i].name);
+@@ -120,11 +120,11 @@ ifsm_flagpoll(struct if_info *info)
+     case ST_INACTIVE:
+         if (!(info->flags & IFF_UP)) {
+             assert(info->worker == WORKER_IDLE);
+-            info->worker = run_netplug_bg(info->name, "probe", NULL);
++            info->worker = run_netplug_bg(info->name, "probe", (char *) NULL);
+             info->state = ST_PROBING;
+         } else if (info->flags & IFF_RUNNING) {
+             assert(info->worker == WORKER_IDLE);
+-            info->worker = run_netplug_bg(info->name, "in", NULL);
++            info->worker = run_netplug_bg(info->name, "in", (char *) NULL);
+             info->state = ST_INNING;
+         }
+         break;
+@@ -143,7 +143,7 @@ ifsm_flagpoll(struct if_info *info)
+     case ST_ACTIVE:
+         if (!(info->flags & IFF_RUNNING)) {
+             assert(info->worker == WORKER_IDLE);
+-            info->worker = run_netplug_bg(info->name, "out", NULL);
++            info->worker = run_netplug_bg(info->name, "out", (char *) NULL);
+             info->state = ST_OUTING;
+         }
+         break;
+@@ -171,7 +171,7 @@ ifsm_flagchange(struct if_info *info, un
+     if (changed == 0)
+         return;
+ 
+-    char buf1[512], buf2[512];
++    char buf1[512] = "", buf2[512] = "";
+     do_log(LOG_INFO, "%s: state %s flags 0x%08x %s -> 0x%08x %s", info->name,
+            statename(info->state),
+            info->flags, flags_str(buf1, info->flags),
+@@ -237,7 +237,7 @@ ifsm_flagchange(struct if_info *info, un
+                 if (!(changed & IFF_RUNNING)) {
+                     kill_script(info->worker);
+                     info->state = ST_PROBING;
+-                    info->worker = run_netplug_bg(info->name, "probe", NULL);
++                    info->worker = run_netplug_bg(info->name, "probe", (char *) NULL);
+                 }
+             }
+         }
+@@ -248,7 +248,7 @@ ifsm_flagchange(struct if_info *info, un
+         case ST_INACTIVE:
+             assert(info->worker == WORKER_IDLE);
+ 
+-            info->worker = run_netplug_bg(info->name, "in", NULL);
++            info->worker = run_netplug_bg(info->name, "in", (char *) NULL);
+             info->state = ST_INNING;
+             break;
+ 
+@@ -265,7 +265,7 @@ ifsm_flagchange(struct if_info *info, un
+             assert(info->flags & IFF_RUNNING);
+             assert(info->worker == WORKER_IDLE);
+ 
+-            info->worker = run_netplug_bg(info->name, "out", NULL);
++            info->worker = run_netplug_bg(info->name, "out", (char *) NULL);
+             info->state = ST_OUTING;
+             break;
+ 
+@@ -315,6 +315,7 @@ void ifsm_scriptdone(work_id_t pid, int
+     info = NULL;
+     for_each_iface(find_pid);
+ 
++    // cppcheck-suppress knownConditionTrueFalse ; reason: find_pid, run by for_each_iface, sets info
+     if (info == NULL) {
+ 	/*
+ 	 * Most probably this child have been one kicked off to handle
+@@ -355,7 +356,7 @@ void ifsm_scriptdone(work_id_t pid, int
+            probe script for this interface */
+         info->state = ST_PROBING;
+         assert(info->worker == WORKER_IDLE);
+-        info->worker = run_netplug_bg(info->name, "probe", NULL);
++        info->worker = run_netplug_bg(info->name, "probe", (char *) NULL);
+         break;
+ 
+     case ST_INNING:
+@@ -373,7 +374,7 @@ void ifsm_scriptdone(work_id_t pid, int
+     case ST_WAIT_IN:
+         assert(info->worker == WORKER_IDLE);
+ 
+-        info->worker = run_netplug_bg(info->name, "out", NULL);
++        info->worker = run_netplug_bg(info->name, "out", (char *) NULL);
+         info->state = ST_OUTING;
+         break;
+ 
+@@ -392,7 +393,7 @@ void ifsm_scriptdone(work_id_t pid, int
+ void
+ parse_rtattrs(struct rtattr *tb[], int max, struct rtattr *rta, int len)
+ {
+-    memset(tb, 0, sizeof(tb) * (max + 1));
++    memset(tb, 0, sizeof(*tb) * (max + 1));
+ 
+     while (RTA_OK(rta, len)) {
+         if (rta->rta_type <= max)
+@@ -407,6 +408,7 @@ parse_rtattrs(struct rtattr *tb[], int m
+ 
+ int if_info_save_interface(struct nlmsghdr *hdr, void *arg)
+ {
++    (void) arg;    /* netlink callback signature */
+     struct rtattr *attrs[IFLA_MAX + 1];
+     struct ifinfomsg *info = NLMSG_DATA(hdr);
+ 
+@@ -416,15 +418,16 @@ int if_info_save_interface(struct nlmsgh
+ }
+ 
+ struct if_info *
+-if_addr_get_interface(struct nlmsghdr *hdr, struct rtattr *attrs[])
++if_addr_get_interface(struct nlmsghdr *hdr, struct rtattr *const attrs[])
+ {
++    (void) attrs;    /* same signature as if_info_get_interface */
+     if (hdr->nlmsg_type != RTM_NEWADDR && hdr->nlmsg_type != RTM_DELADDR) {
+         return NULL;
+     }
+ 
+-    struct ifaddrmsg *ifa = NLMSG_DATA(hdr);
++    const struct ifaddrmsg *ifa = NLMSG_DATA(hdr);
+ 
+-    if (hdr->nlmsg_len < NLMSG_LENGTH(sizeof(ifa))) {
++    if (hdr->nlmsg_len < NLMSG_LENGTH(sizeof(*ifa))) {
+         return NULL;
+     }
+ 
+@@ -432,7 +435,7 @@ if_addr_get_interface(struct nlmsghdr *h
+     struct if_info *i, **ip;
+ 
+     for (ip = &if_info[x]; (i = *ip) != NULL; ip = &i->next) {
+-        if (i->index == ifa->ifa_index) {
++        if ((__u32) i->index == ifa->ifa_index) {
+             break;
+         }
+     }
+@@ -441,7 +444,8 @@ if_addr_get_interface(struct nlmsghdr *h
+ }
+ 
+ struct if_info *
+-if_info_get_interface(struct nlmsghdr *hdr, struct rtattr *attrs[])
++// cppcheck-suppress constParameter ; reason: const struct rtattr *const[] would need casts at every call (C does not convert struct rtattr ** to it implicitly)
++if_info_get_interface(struct nlmsghdr *hdr, struct rtattr *const attrs[])
+ {
+     if (hdr->nlmsg_type != RTM_NEWLINK) {
+         return NULL;
+@@ -484,7 +488,7 @@ if_info_get_interface(struct nlmsghdr *h
+ struct if_info *
+ if_info_update_interface(struct nlmsghdr *hdr, struct rtattr *attrs[])
+ {
+-    struct ifinfomsg *info = NLMSG_DATA(hdr);
++    const struct ifinfomsg *info = NLMSG_DATA(hdr);
+     struct if_info *i;
+ 
+     if ((i = if_info_get_interface(hdr, attrs)) == NULL) {
+@@ -499,12 +503,12 @@ if_info_update_interface(struct nlmsghdr
+     if (attrs[IFLA_ADDRESS]) {
+         int alen;
+         i->addr_len = alen = RTA_PAYLOAD(attrs[IFLA_ADDRESS]);
+-        if (alen > sizeof(i->addr))
++        if ((size_t) alen > sizeof(i->addr))
+             alen = sizeof(i->addr);
+         if (memcmp(i->addr, RTA_DATA(attrs[IFLA_ADDRESS]), alen)) {
+             do_log(LOG_DEBUG, "Mac address on interface %s changed", i->name);
+             /* Run scripts on mac address change */
+-            (void)run_netplug_bg(i->name, "macchange", NULL, NULL, NULL);
++            (void)run_netplug_bg(i->name, "macchange", (char *) NULL);
+         }
+         memcpy(i->addr, RTA_DATA(attrs[IFLA_ADDRESS]), alen);
+     } else {
+@@ -517,7 +521,7 @@ if_info_update_interface(struct nlmsghdr
+ 
+ void if_info_delete_interface(struct nlmsghdr *hdr)
+ {
+-    struct ifinfomsg *info = NLMSG_DATA(hdr);
++    const struct ifinfomsg *info = NLMSG_DATA(hdr);
+     struct if_info *i, **ip;
+     int x = info->ifi_index & (INFOHASHSZ-1);
+ 
+--- a/lib.c
++++ b/lib.c
+@@ -73,7 +73,7 @@ static pid_t run_netplug_bg_now(int argc
+ static void
+ bg_queue_init(void)
+ {
+-    char *s;
++    const char *s;
+ 
+     if (bg_running_max)
+         /* Already initialized */
+@@ -154,14 +154,14 @@ bg_queue_start(int argc, char **argv)
+ 
+     bg_queue_init();
+ 
+-    bgq = calloc(sizeof(*bgq), 1);
++    bgq = calloc(1, sizeof(*bgq));
+     assert(bgq != NULL);
+     bgq->id = ++bg_work_id;
+     assert(bgq->id > 0);  /* should never wrap */
+ 
+     /* Take a copy of the program parameters */
+     bgq->argc = argc;
+-    bgq->argv = calloc(sizeof(*argv), argc);
++    bgq->argv = calloc(argc, sizeof(*argv));
+     assert(bgq->argv != NULL);
+     for (i = 0; i < argc && argv[i]; i++) {
+         bgq->argv[i] = strdup(argv[i]);
+@@ -184,13 +184,12 @@ work_id_t
+ bg_scriptdone(pid_t pid)
+ {
+     struct bg_queue *bgq;
+-    work_id_t id;
+ 
+     TAILQ_FOREACH(bgq, &bg_running, entry)
+         if (bgq->pid == pid) {
+             do_log(LOG_DEBUG, "BGQ: reap id %ld with pid %d",
+                    bgq->id, bgq->pid);
+-            id = bgq->id;
++            work_id_t id = bgq->id;
+             bg_queue_done(bgq);
+             return id;
+         }
+@@ -205,11 +204,12 @@ do_log(int pri, const char *fmt, ...)
+ {
+     extern int use_syslog;
+     va_list ap;
+-    va_start(ap, fmt);
+ 
+     if (pri == LOG_DEBUG && !debug)
+         return;
+ 
++    va_start(ap, fmt);
++
+     if (use_syslog) {
+         vsyslog(pri, fmt, ap);
+     } else {
+@@ -270,16 +270,15 @@ run_netplug_bg(char *param, ...)
+ {
+     int argc = 1;
+     char *argv[MAX_PARAMS+1];
+-    const char *arg;
+     va_list ap;
+ 
+     assert(param);
+ 
+     va_start(ap, param);
+-    argv[0] = script_file;
++    argv[0] = (char *) script_file;    /* execvp does not write it */
+     argv[argc++] = param;
+     while (argc < MAX_PARAMS) {
+-	    arg = argv[argc++] = va_arg(ap, char *);
++	    const char *arg = argv[argc++] = va_arg(ap, char *);
+ 	    if (!arg)
+ 		    break;
+     }
+@@ -293,8 +292,9 @@ static pid_t
+ run_netplug_bg_now(int argc, char **argv)
+ {
+     pid_t pid;
+-    char *param = argv[1];
++    const char *param = argv[1];
+     char params[MAX_PARAMS_LENGTH];
++    size_t len;
+     int i;
+ 
+     if ((pid = fork()) == -1) {
+@@ -307,11 +307,11 @@ run_netplug_bg_now(int argc, char **argv
+ 
+     setpgrp();                  /* become group leader */
+ 
+-    strncpy(params, param, MAX_PARAMS_LENGTH);
+-    for (i=2; i < argc-1 && argv[i] != NULL; i++) {
+-	    strncat(params, " ", MAX_PARAMS_LENGTH);
+-	    strncat(params, argv[i], MAX_PARAMS_LENGTH);
+-    }
++    /* the parameters for the log line, cut at the buffer size (strncat
++     * with the buffer size as its bound could write past the end) */
++    len = snprintf(params, sizeof(params), "%s", param);
++    for (i=2; i < argc-1 && argv[i] != NULL && len < sizeof(params); i++)
++	    len += snprintf(params + len, sizeof(params) - len, " %s", argv[i]);
+ 
+     do_log(LOG_INFO, "%s %s -> pid %d", script_file, params, getpid());
+ 
+@@ -327,9 +327,9 @@ run_netplug(char *ifname, char *action)
+ {
+     char *argv[] = {(char *)script_file, ifname, action, NULL};
+     pid_t pid = run_netplug_bg_now(4, argv);
+-    int status, ret;
++    int status;
+ 
+-    if ((ret = waitpid(pid, &status, 0)) == -1) {
++    if (waitpid(pid, &status, 0) == -1) {
+         do_log(LOG_ERR, "waitpid: %m");
+         exit(1);
+     }
+--- a/main.c
++++ b/main.c
+@@ -42,7 +42,7 @@ int use_syslog;
+ static char *pid_file;
+ 
+ char *
+-family2str(struct ifaddrmsg *info)
++family2str(const struct ifaddrmsg *info)
+ {
+    switch (info->ifa_family) {
+          case AF_INET:
+@@ -55,7 +55,7 @@ family2str(struct ifaddrmsg *info)
+ }
+ 
+ char *
+-hdrtype2str(struct nlmsghdr *hdr)
++hdrtype2str(const struct nlmsghdr *hdr)
+ {
+    switch (hdr->nlmsg_type) {
+           case RTM_NEWADDR:
+@@ -70,6 +70,7 @@ hdrtype2str(struct nlmsghdr *hdr)
+ static int
+ handle_ifaddr(struct nlmsghdr *hdr, void *arg)
+ {
++    (void) arg;    /* netlink callback signature */
+     if (hdr->nlmsg_type != RTM_NEWADDR && hdr->nlmsg_type != RTM_DELADDR)
+         return 0;
+ 
+@@ -96,21 +97,21 @@ handle_ifaddr(struct nlmsghdr *hdr, void
+         return 0;
+     }
+ 
+-    char addrbuf[256];
+-
+     struct rtattr *ifaddr = attrs[IFA_LOCAL] ? attrs[IFA_LOCAL] : attrs[IFA_ADDRESS];
+     const char *addr = NULL;
+     if (!ifaddr) {
+         do_log(LOG_DEBUG, "%s: not addresse set", i->name);
+ 
+     } else {
++        static char addrbuf[256];
++
+         addr = inet_ntop(ifa->ifa_family, RTA_DATA(ifaddr),
+                                  addrbuf, sizeof(addrbuf));
+     }
+ 
+     if (addr) {
+         (void)run_netplug_bg(i->name, hdrtype2str(hdr), family2str(ifa),
+-			 addr, NULL);
++			 addr, (char *) NULL);
+     }
+ 
+     return 0;
+@@ -119,6 +120,7 @@ handle_ifaddr(struct nlmsghdr *hdr, void
+ static int
+ handle_interface(struct nlmsghdr *hdr, void *arg)
+ {
++    (void) arg;    /* netlink callback signature */
+     if (hdr->nlmsg_type != RTM_NEWLINK && hdr->nlmsg_type != RTM_DELLINK) {
+         return 0;
+     }
+@@ -170,7 +172,7 @@ handle_interface(struct nlmsghdr *hdr, v
+ 
+ 
+ static void
+-usage(char *progname, int exitcode)
++usage(const char *progname, int exitcode)
+ {
+     fprintf(stderr, "Usage: %s [-DFP] [-c config-file] [-s script-file] [-i interface] [-p pid-file]\n",
+             progname);
+@@ -238,7 +240,9 @@ child_handler(int sig, siginfo_t *info,
+ {
+     struct child_exit ce;
+     int ret;
+-    ssize_t s = 0;
++
++    (void) info;    /* SA_SIGINFO handler signature */
++    (void) v;
+ 
+     assert(sig == SIGCHLD);
+ 
+@@ -246,7 +250,7 @@ child_handler(int sig, siginfo_t *info,
+     {
+ 	ce.pid = ret;
+ 
+-	s = write(child_handler_pipe[1], &ce, sizeof(ce));
++	ssize_t s = write(child_handler_pipe[1], &ce, sizeof(ce));
+ 
+ 	/* Make sure each write wrote the full byte sequence. */
+ 	if (s != sizeof(ce))
+@@ -476,21 +480,21 @@ main(int argc, char *argv[])
+ 
+         if (fds[1].revents & POLLIN) {
+             /* netplug script finished */
+-            int ret;
++            ssize_t got;
+             struct child_exit ce;
+ 
+             do {
+-                ret = read(child_handler_pipe[0], &ce, sizeof(ce));
++                got = read(child_handler_pipe[0], &ce, sizeof(ce));
+ 
+-                assert(ret == 0 || ret == -1 || ret == sizeof(ce));
++                assert(got == 0 || got == -1 || got == sizeof(ce));
+ 
+-                if (ret == sizeof(ce))
++                if (got == sizeof(ce))
+                     ifsm_scriptdone(bg_scriptdone(ce.pid), ce.status);
+-                else if (ret == -1 && errno != EAGAIN) {
++                else if (got == -1 && errno != EAGAIN) {
+                     do_log(LOG_ERR, "pipe read failed: %m");
+                     exit(1);
+                 }
+-            } while(ret == sizeof(ce));
++            } while(got == sizeof(ce));
+         }
+     }
+ 
+--- a/netlink.c
++++ b/netlink.c
+@@ -149,7 +149,7 @@ netlink_listen(int fd, netlink_callback
+         struct nlmsghdr *hdr;
+         netlink_callback callback = NULL;
+ 
+-        for (hdr = (struct nlmsghdr*) buf; status >= sizeof(*hdr); ) {
++        for (hdr = (struct nlmsghdr*) buf; status >= (int) sizeof(*hdr); ) {
+             int len = hdr->nlmsg_len;
+             int l = len - sizeof(*hdr);
+ 
+@@ -231,7 +231,7 @@ netlink_receive_dump(int fd, netlink_cal
+         struct nlmsghdr *hdr = (struct nlmsghdr *) buf;
+ 
+         while (NLMSG_OK(hdr, status)) {
+-            if (hdr->nlmsg_seq != dump) {
++            if (hdr->nlmsg_seq != (__u32) dump) {
+                 do_log(LOG_ERR, "Skipping junk");
+                 goto skip_it;
+             }
+@@ -240,7 +240,7 @@ netlink_receive_dump(int fd, netlink_cal
+                 return;
+             }
+             else if (hdr->nlmsg_type == NLMSG_ERROR) {
+-                struct nlmsgerr *err = (struct nlmsgerr *) NLMSG_DATA(hdr);
++                const struct nlmsgerr *err = (struct nlmsgerr *) NLMSG_DATA(hdr);
+ 
+                 if (hdr->nlmsg_len < NLMSG_LENGTH(sizeof(struct nlmsgerr))) {
+                     do_log(LOG_ERR, "Netlink message truncated");
+@@ -252,9 +252,7 @@ netlink_receive_dump(int fd, netlink_cal
+             }
+ 
+             if (callback) {
+-		int err;
+-
+-                if ((err = callback(hdr, arg)) == -1) {
++                if (callback(hdr, arg) == -1) {
+                     do_log(LOG_ERR, "Callback failed");
+                     exit(1);
+                 }
+--- a/netplug.h
++++ b/netplug.h
+@@ -56,12 +56,19 @@ typedef int64_t work_id_t;
+ #define WORKER_INVALID 0
+ 
+ struct if_info {
++    // cppcheck-suppress unusedStructMember ; reason: used through struct if_info pointers in the .c files; cppcheck checks the header on its own
+     struct if_info *next;
++    // cppcheck-suppress unusedStructMember ; reason: used through struct if_info pointers in the .c files; cppcheck checks the header on its own
+     int index;
++    // cppcheck-suppress unusedStructMember ; reason: used through struct if_info pointers in the .c files; cppcheck checks the header on its own
+     int type;
++    // cppcheck-suppress unusedStructMember ; reason: used through struct if_info pointers in the .c files; cppcheck checks the header on its own
+     unsigned flags;
++    // cppcheck-suppress unusedStructMember ; reason: used through struct if_info pointers in the .c files; cppcheck checks the header on its own
+     int addr_len;
++    // cppcheck-suppress unusedStructMember ; reason: used through struct if_info pointers in the .c files; cppcheck checks the header on its own
+     unsigned char addr[8];
++    // cppcheck-suppress unusedStructMember ; reason: used through struct if_info pointers in the .c files; cppcheck checks the header on its own
+     char name[16];
+ 
+     enum ifstate {
+@@ -75,17 +82,20 @@ struct if_info {
+         ST_ACTIVE,              /* interface active */
+         ST_OUTING,              /* plugout script is running */
+         ST_INSANE,              /* interface seems to be flapping */
++    // cppcheck-suppress unusedStructMember ; reason: used through struct if_info pointers in the .c files; cppcheck checks the header on its own
+     }           state;
+ 
++    // cppcheck-suppress unusedStructMember ; reason: used through struct if_info pointers in the .c files; cppcheck checks the header on its own
+     work_id_t   worker;         /* id of current in/out script */
++    // cppcheck-suppress unusedStructMember ; reason: used through struct if_info pointers in the .c files; cppcheck checks the header on its own
+     time_t      lastchange;     /* timestamp of last state change */
+ };
+ 
+ struct if_info *if_addr_get_interface(struct nlmsghdr *hdr,
+-                                      struct rtattr *attrs[]);
++                                      struct rtattr *const attrs[]);
+ 
+ struct if_info *if_info_get_interface(struct nlmsghdr *hdr,
+-                                      struct rtattr *attrs[]);
++                                      struct rtattr *const attrs[]);
+ void if_info_delete_interface(struct nlmsghdr *hdr);
+ struct if_info *if_info_update_interface(struct nlmsghdr *hdr,
+                                          struct rtattr *attrs[]);
+--- a/scripts/netplug
++++ b/scripts/netplug
+@@ -24,13 +24,13 @@ addr="$4"
+ 
+ case "$action" in
+ in)
+-   run-parts -a $dev /etc/netplug/linkup.d
++   run-parts -a "$dev" /etc/netplug/linkup.d
+     ;;
+ out)
+-   run-parts -a $dev /etc/netplug/linkdown.d
++   run-parts -a "$dev" /etc/netplug/linkdown.d
+     ;;
+ macchange)
+-   run-parts -a $dev /etc/netplug/macchange.d
++   run-parts -a "$dev" /etc/netplug/macchange.d
+     ;;
+ 
+ # probe loads and initialises the driver for the interface and brings the
+@@ -43,11 +43,11 @@ probe)
+     ;;
+ 
+ newaddr)
+-   run-parts -a $dev -a $proto -a $addr /etc/netplug/newaddr.d
++   run-parts -a "$dev" -a "$proto" -a "$addr" /etc/netplug/newaddr.d
+     ;;
+ 
+ deladdr)
+-   run-parts -a $dev -a $proto -a $addr /etc/netplug/deladdr.d
++   run-parts -a "$dev" -a "$proto" -a "$addr" /etc/netplug/deladdr.d
+     ;;
+ *)
+     exit 1
