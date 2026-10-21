@@ -1,3 +1,12 @@
+netplug (1.2.9.2-5+vyatta11+nudanos2) trixie; urgency=medium
+
+  * Code-quality lint fixes (distro docs/porting.md): analyzer findings
+    fixed, see the git log.
+  * Among them: the parameter log line's strncat could write past its
+    buffer, and do_log returned without va_end on its debug path.
+
+ -- NuDanOS Maintainers <jon@fernandez.tech>  Wed, 21 Oct 2026 07:01:13 +0000
+
 netplug (1.2.9.2-5+vyatta11+nudanos1) trixie; urgency=medium
 
   * Port to Debian 13 (trixie): debhelper-compat 13, Standards-Version 4.7.2, Rules-Requires-Root, NuDanOS Vcs.
